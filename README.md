@@ -1,5 +1,4 @@
-# blog.trendafilovi.net
-
+# Just A (minimalist) blog
 Minimal PHP blog for shared hosting.
 
 ## Requirements
@@ -15,7 +14,7 @@ Minimal PHP blog for shared hosting.
 Open:
 
 ```text
-https://blog.trendafilovi.net/admin/
+https://{blog_url}/admin/
 ```
 
 The setup screen creates the admin username/password and writes `data/config.php`.
