@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/app.php';
+blog_send_security_headers();
 blog_ensure_storage();
 $config = blog_config();
 $path = blog_current_path();

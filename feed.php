@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/app.php';
+blog_send_security_headers(false);
 $config = blog_config();
 $posts = blog_all_posts(false);
 header('Content-Type: application/rss+xml; charset=utf-8');

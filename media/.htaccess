@@ -1,1 +1,12 @@
 Options -Indexes
+
+# Prevent the browser from MIME-sniffing uploaded files into executable types.
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Never execute uploaded content as a script.
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|pht|cgi|pl|py|sh|asp|aspx)$">
+  Order allow,deny
+  Deny from all
+</FilesMatch>

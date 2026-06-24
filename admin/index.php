@@ -1,6 +1,21 @@
 <?php
+$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+ini_set('session.use_strict_mode', '1');
+if (PHP_VERSION_ID >= 70300) {
+    session_set_cookie_params(array(
+        'lifetime' => 0,
+        'path' => '/',
+        'httponly' => true,
+        'secure' => $secure,
+        'samesite' => 'Lax',
+    ));
+} else {
+    session_set_cookie_params(0, '/; samesite=Lax', '', $secure, true);
+}
 session_start();
 require dirname(__DIR__) . '/app.php';
+blog_send_security_headers();
 blog_ensure_storage();
 $error = '';
 $message = '';
@@ -8,9 +23,11 @@ $action = isset($_GET['action']) ? $_GET['action'] : 'dashboard';
 $config = blog_config();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['setup'])) {
+    if (isset($_POST['setup']) && !blog_has_config()) {
         $password = isset($_POST['password']) ? $_POST['password'] : '';
-        if (strlen($password) < 10) {
+        if (!blog_check_csrf()) {
+            $error = 'Session expired. Please try again.';
+        } elseif (strlen($password) < 10) {
             $error = 'Use a password with at least 10 characters.';
         } else {
             $config = array(
@@ -22,22 +39,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'base_url' => rtrim(trim($_POST['base_url']), '/'),
             );
             blog_save_config($config);
+            session_regenerate_id(true);
             $_SESSION['blog_admin'] = true;
             header('Location: /admin/');
             exit;
         }
     } elseif (isset($_POST['login'])) {
-        if (!blog_has_config()) {
+        $wait = blog_login_blocked_seconds();
+        if ($wait > 0) {
+            $error = 'Too many attempts. Try again in ' . ceil($wait / 60) . ' minute(s).';
+        } elseif (!blog_check_csrf()) {
+            $error = 'Session expired. Please try again.';
+        } elseif (!blog_has_config()) {
             $error = 'Run setup first.';
-        } elseif ($_POST['username'] === $config['username'] && password_verify($_POST['password'], $config['password_hash'])) {
+        } elseif (isset($_POST['username'], $_POST['password'])
+            && $_POST['username'] === $config['username']
+            && password_verify($_POST['password'], $config['password_hash'])
+        ) {
+            blog_login_clear_failures();
+            session_regenerate_id(true);
             $_SESSION['blog_admin'] = true;
             header('Location: /admin/');
             exit;
         } else {
+            blog_login_register_failure();
             $error = 'Invalid username or password.';
         }
     } elseif (isset($_POST['logout'])) {
-        session_destroy();
+        if (blog_check_csrf()) {
+            session_destroy();
+        }
         header('Location: /admin/');
         exit;
     } elseif (blog_admin_logged_in() && blog_check_csrf()) {
@@ -139,6 +170,7 @@ admin_header('Blog admin');
         <a href="/" target="_blank">View site</a>
       </nav>
       <form method="post" class="logout">
+        <input type="hidden" name="csrf" value="<?php echo h(blog_csrf_token()); ?>">
         <button type="submit" name="logout">Log out</button>
       </form>
 <?php endif; ?>
@@ -155,6 +187,7 @@ admin_header('Blog admin');
     <section class="panel">
       <h1>Set up the blog</h1>
       <form method="post">
+        <input type="hidden" name="csrf" value="<?php echo h(blog_csrf_token()); ?>">
         <label>Site title <input name="site_title" value="Hristo Trendafilov" required></label>
         <label>Tagline <input name="tagline" value="Notes and links"></label>
         <label>Author <input name="author" value="Hristo Trendafilov" required></label>
@@ -168,6 +201,7 @@ admin_header('Blog admin');
     <section class="panel">
       <h1>Log in</h1>
       <form method="post">
+        <input type="hidden" name="csrf" value="<?php echo h(blog_csrf_token()); ?>">
         <label>Username <input name="username" autocomplete="username" required></label>
         <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
         <button type="submit" name="login">Log in</button>

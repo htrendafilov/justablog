@@ -1,9 +1,101 @@
 <?php
 
+// Production error handling: never leak stack traces to visitors.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
 define('BLOG_ROOT', __DIR__);
 define('BLOG_DATA', BLOG_ROOT . '/data');
 define('BLOG_POSTS', BLOG_DATA . '/posts');
 define('BLOG_MEDIA', BLOG_ROOT . '/media');
+
+function blog_send_security_headers($html = true)
+{
+    if (headers_sent()) {
+        return;
+    }
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    if ($html) {
+        // Posts may reference remote images over https; admin confirm() handlers
+        // need inline script.
+        header(
+            "Content-Security-Policy: default-src 'self'; "
+            . "img-src 'self' https: data:; media-src 'self' https:; "
+            . "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+            . "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        );
+    }
+}
+
+function blog_throttle_store()
+{
+    return BLOG_DATA . '/.login_throttle.json';
+}
+
+function blog_throttle_key()
+{
+    $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown';
+    return preg_replace('/[^a-f0-9:._-]/i', '_', $ip);
+}
+
+function blog_throttle_read()
+{
+    $file = blog_throttle_store();
+    if (!is_file($file)) {
+        return array();
+    }
+    $data = json_decode((string) file_get_contents($file), true);
+    return is_array($data) ? $data : array();
+}
+
+function blog_login_blocked_seconds()
+{
+    $data = blog_throttle_read();
+    $key = blog_throttle_key();
+    if (!empty($data[$key]['until']) && $data[$key]['until'] > time()) {
+        return $data[$key]['until'] - time();
+    }
+    return 0;
+}
+
+function blog_login_register_failure()
+{
+    blog_ensure_storage();
+    $window = 900;
+    $max = 8;
+    $lock = 900;
+    $now = time();
+    $data = blog_throttle_read();
+    $key = blog_throttle_key();
+    $rec = isset($data[$key]) ? $data[$key] : array('count' => 0, 'first' => $now, 'until' => 0);
+    if ($now - $rec['first'] > $window) {
+        $rec = array('count' => 0, 'first' => $now, 'until' => 0);
+    }
+    $rec['count']++;
+    if ($rec['count'] >= $max) {
+        $rec['until'] = $now + $lock;
+    }
+    $data[$key] = $rec;
+    foreach ($data as $k => $v) {
+        if (isset($v['first']) && $now - $v['first'] > 86400) {
+            unset($data[$k]);
+        }
+    }
+    file_put_contents(blog_throttle_store(), json_encode($data), LOCK_EX);
+}
+
+function blog_login_clear_failures()
+{
+    $data = blog_throttle_read();
+    $key = blog_throttle_key();
+    if (isset($data[$key])) {
+        unset($data[$key]);
+        file_put_contents(blog_throttle_store(), json_encode($data), LOCK_EX);
+    }
+}
 
 if (!function_exists('hash_equals')) {
     function hash_equals($known, $user)
@@ -417,7 +509,9 @@ function blog_clean_filename($filename)
 
 function blog_allowed_upload_extensions()
 {
-    return array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mov', 'pdf', 'zip', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx');
+    // 'svg' is intentionally excluded: SVGs can carry inline scripts and would
+    // execute as stored XSS when opened directly from /media.
+    return array('jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'pdf', 'zip', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx');
 }
 
 function blog_save_upload($file)

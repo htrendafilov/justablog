@@ -1,2 +1,25 @@
 Options -Indexes
 DirectoryIndex index.php
+
+# ---------------------------------------------------------------------------
+# Force HTTPS. ENABLE ONLY AFTER a valid TLS certificate is active for this
+# domain (via cbox support, or Cloudflare in front). Until then keep it
+# commented out or the site becomes unreachable.
+#   <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     # Works directly and behind a proxy/CDN (Cloudflare sets X-Forwarded-Proto).
+#     RewriteCond %{HTTPS} !=on
+#     RewriteCond %{HTTP:X-Forwarded-Proto} !https
+#     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+#   </IfModule>
+#   <IfModule mod_headers.c>
+#     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#   </IfModule>
+# ---------------------------------------------------------------------------
+
+# Block access to VCS metadata and dotfiles if ever uploaded.
+RedirectMatch 404 /\.git
+<FilesMatch "^\.">
+  Order allow,deny
+  Deny from all
+</FilesMatch>
