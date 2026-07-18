@@ -17,6 +17,9 @@ echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     <link><?php echo h(blog_url('/?post=' . $post['slug'])); ?></link>
     <guid><?php echo h(blog_url('/?post=' . $post['slug'])); ?></guid>
     <pubDate><?php echo date(DATE_RSS, strtotime($post['date'])); ?></pubDate>
+<?php foreach (blog_post_tags($post) as $tag): ?>
+    <category><?php echo h($tag); ?></category>
+<?php endforeach; ?>
     <description><![CDATA[<?php echo blog_markdown($post['body']); ?>]]></description>
   </item>
 <?php endforeach; ?>

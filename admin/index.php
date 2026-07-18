@@ -107,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'slug' => $slug,
                     'date' => trim($_POST['date']) ? trim($_POST['date']) : date('Y-m-d'),
                     'status' => $_POST['status'] === 'published' ? 'published' : 'draft',
+                    'tags' => isset($_POST['tags']) ? $_POST['tags'] : '',
                     'body' => isset($_POST['body']) ? $_POST['body'] : '',
                 );
                 if ($old_slug && $old_slug !== $slug) {
@@ -258,7 +259,7 @@ admin_header('Blog admin');
     $editing = $action === 'edit';
     $post = $editing && isset($_GET['slug']) ? blog_load_post($_GET['slug']) : null;
     if (!$post) {
-        $post = array('title' => '', 'slug' => '', 'date' => date('Y-m-d'), 'status' => 'draft', 'body' => '');
+        $post = array('title' => '', 'slug' => '', 'date' => date('Y-m-d'), 'status' => 'draft', 'tags' => '', 'body' => '');
     }
 ?>
     <section class="panel">
@@ -275,6 +276,7 @@ admin_header('Blog admin');
             <option value="published"<?php echo $post['status'] === 'published' ? ' selected' : ''; ?>>Published</option>
           </select>
         </label>
+        <label>Tags <input name="tags" value="<?php echo h(implode(', ', blog_post_tags($post))); ?>" placeholder="comma, separated"></label>
         <label>Body
           <textarea name="body" rows="18"><?php echo h($post['body']); ?></textarea>
         </label>
@@ -303,13 +305,14 @@ admin_header('Blog admin');
         </div>
       </div>
       <table>
-        <thead><tr><th>Title</th><th>Date</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Title</th><th>Date</th><th>Status</th><th>Tags</th><th></th></tr></thead>
         <tbody>
 <?php foreach (blog_all_posts(true) as $post): ?>
           <tr>
             <td><?php echo h($post['title']); ?></td>
             <td><?php echo h(substr($post['date'], 0, 10)); ?></td>
             <td><?php echo h($post['status']); ?></td>
+            <td><?php echo h(implode(', ', blog_post_tags($post))); ?></td>
             <td><a href="/admin/?action=edit&amp;slug=<?php echo h($post['slug']); ?>">Edit</a></td>
           </tr>
 <?php endforeach; ?>

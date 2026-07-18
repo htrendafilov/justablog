@@ -194,7 +194,7 @@ function blog_legacy_post_path($slug)
 
 function blog_parse_front_matter($content)
 {
-    $post = array('title' => '', 'slug' => '', 'date' => date('Y-m-d'), 'status' => 'draft', 'body' => '');
+    $post = array('title' => '', 'slug' => '', 'date' => date('Y-m-d'), 'status' => 'draft', 'tags' => '', 'body' => '');
     $content = (string) $content;
     $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
 
@@ -237,6 +237,7 @@ function blog_format_post_markdown($post)
     $slug = blog_format_front_matter_value(isset($post['slug']) ? $post['slug'] : blog_slugify($title));
     $date = blog_format_front_matter_value(isset($post['date']) ? $post['date'] : date('Y-m-d'));
     $status = isset($post['status']) && $post['status'] === 'published' ? 'published' : 'draft';
+    $tags = implode(', ', blog_post_tags($post));
     $body = isset($post['body']) ? rtrim($post['body']) : '';
 
     return "---\n"
@@ -244,6 +245,7 @@ function blog_format_post_markdown($post)
         . "date: " . $date . "\n"
         . "status: " . $status . "\n"
         . "slug: " . $slug . "\n"
+        . "tags: " . $tags . "\n"
         . "---\n\n"
         . $body . "\n";
 }
@@ -329,6 +331,70 @@ function blog_all_posts($include_drafts)
     });
 
     return $posts;
+}
+
+function blog_tag_slug($tag)
+{
+    // Like blog_slugify(), but returns '' for empty input instead of inventing
+    // a timestamped fallback name.
+    $tag = strtolower(trim((string) $tag));
+    $tag = preg_replace('/[^a-z0-9]+/', '-', $tag);
+    return trim($tag, '-');
+}
+
+function blog_post_tags($post)
+{
+    $raw = isset($post['tags']) ? $post['tags'] : '';
+    // Legacy .json posts may already hold an array.
+    $parts = is_array($raw) ? $raw : explode(',', (string) $raw);
+    $tags = array();
+    foreach ($parts as $part) {
+        $slug = blog_tag_slug($part);
+        if ($slug !== '' && !in_array($slug, $tags, true)) {
+            $tags[] = $slug;
+        }
+    }
+    return $tags;
+}
+
+function blog_posts_by_tag($tag, $include_drafts)
+{
+    $tag = blog_tag_slug($tag);
+    if ($tag === '') {
+        return array();
+    }
+    $posts = array();
+    foreach (blog_all_posts($include_drafts) as $post) {
+        if (in_array($tag, blog_post_tags($post), true)) {
+            $posts[] = $post;
+        }
+    }
+    return $posts;
+}
+
+function blog_all_tags($include_drafts)
+{
+    $counts = array();
+    foreach (blog_all_posts($include_drafts) as $post) {
+        foreach (blog_post_tags($post) as $tag) {
+            $counts[$tag] = isset($counts[$tag]) ? $counts[$tag] + 1 : 1;
+        }
+    }
+    ksort($counts);
+    return $counts;
+}
+
+function blog_tag_chips($post)
+{
+    $tags = blog_post_tags($post);
+    if (!$tags) {
+        return '';
+    }
+    $html = '<p class="tags">';
+    foreach ($tags as $tag) {
+        $html .= '<a class="tag" href="/?tag=' . rawurlencode($tag) . '">' . h($tag) . '</a>';
+    }
+    return $html . "</p>\n";
 }
 
 function blog_excerpt($body)

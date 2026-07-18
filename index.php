@@ -12,6 +12,10 @@ if (preg_match('#^/post/([a-z0-9-]+)$#', $path, $match)) {
     $slug = blog_slugify($_GET['post']);
 }
 
+$tag = isset($_GET['tag']) ? blog_tag_slug($_GET['tag']) : '';
+$show_tags = isset($_GET['tags']);
+$post = null;
+
 if ($slug) {
     $post = blog_load_post($slug);
     if (!$post || $post['status'] !== 'published') {
@@ -20,8 +24,11 @@ if ($slug) {
     } else {
         $page_title = $post['title'];
     }
+} elseif ($show_tags) {
+    $page_title = 'Tags';
+} elseif ($tag !== '') {
+    $page_title = 'Posts tagged "' . $tag . '"';
 } else {
-    $post = null;
     $page_title = $config['site_title'];
 }
 ?><!doctype html>
@@ -40,6 +47,7 @@ if ($slug) {
       <a class="brand" href="/"><?php echo h($config['site_title']); ?></a>
       <nav>
         <a href="/">Archive</a>
+        <a href="/?tags=1">Tags</a>
         <a href="/feed.php">RSS</a>
       </nav>
     </header>
@@ -53,22 +61,47 @@ if ($slug) {
     <article class="post">
       <p class="date"><?php echo h(date('F j, Y', strtotime($post['date']))); ?></p>
       <h1><?php echo h($post['title']); ?></h1>
+      <?php echo blog_tag_chips($post); ?>
       <?php echo blog_markdown($post['body']); ?>
     </article>
-<?php else: ?>
+<?php elseif ($show_tags): ?>
+<?php $tags = blog_all_tags(false); ?>
     <section class="intro">
+      <h1>Tags</h1>
+    </section>
+    <section class="tag-index">
+<?php foreach ($tags as $name => $count): ?>
+      <a class="tag" href="/?tag=<?php echo rawurlencode($name); ?>"><?php echo h($name); ?> <span><?php echo (int) $count; ?></span></a>
+<?php endforeach; ?>
+<?php if (!$tags): ?>
+      <p>No tags yet.</p>
+<?php endif; ?>
+    </section>
+<?php else: ?>
+<?php $posts = $tag !== '' ? blog_posts_by_tag($tag, false) : blog_all_posts(false); ?>
+    <section class="intro">
+<?php if ($tag !== ''): ?>
+      <h1>Posts tagged &ldquo;<?php echo h($tag); ?>&rdquo;</h1>
+      <p class="tag-clear"><a href="/">Show all posts</a></p>
+<?php else: ?>
       <h1><?php echo h(isset($config['tagline']) ? $config['tagline'] : 'Notes'); ?></h1>
+<?php endif; ?>
     </section>
     <section class="archive">
-<?php foreach (blog_all_posts(false) as $item): ?>
+<?php foreach ($posts as $item): ?>
       <article class="archive-item">
         <time><?php echo h(date('M j, Y', strtotime($item['date']))); ?></time>
         <h2><a href="/?post=<?php echo h($item['slug']); ?>"><?php echo h($item['title']); ?></a></h2>
         <p><?php echo h(blog_excerpt($item['body'])); ?></p>
+        <?php echo blog_tag_chips($item); ?>
       </article>
 <?php endforeach; ?>
-<?php if (!blog_all_posts(false)): ?>
+<?php if (!$posts): ?>
+<?php if ($tag !== ''): ?>
+      <p>No posts tagged &ldquo;<?php echo h($tag); ?>&rdquo;.</p>
+<?php else: ?>
       <p>No posts yet.</p>
+<?php endif; ?>
 <?php endif; ?>
     </section>
 <?php endif; ?>
