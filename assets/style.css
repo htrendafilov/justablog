@@ -84,6 +84,18 @@ a {
   color: #3f4650;
 }
 
+.preview-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 32px;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  color: var(--muted);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 .post > h1 {
   margin: 0 0 30px;
   font-size: 38px;

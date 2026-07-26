@@ -142,12 +142,19 @@ button,
 .actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .button.secondary {
   border-color: var(--line);
   background: #fff;
   color: var(--accent);
+}
+
+.row-actions {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
 }
 
 .panel-gap {

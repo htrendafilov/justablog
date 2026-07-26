@@ -1,5 +1,9 @@
 <?php
 require __DIR__ . '/app.php';
+$preview_requested = isset($_GET['preview']) && $_GET['preview'] === '1';
+if ($preview_requested) {
+    blog_start_session();
+}
 blog_send_security_headers();
 blog_ensure_storage();
 $config = blog_config();
@@ -19,7 +23,8 @@ $post = null;
 
 if ($slug) {
     $post = blog_load_post($slug);
-    if (!$post || $post['status'] !== 'published') {
+    if (!blog_post_is_visible($post, $preview_requested, blog_admin_logged_in())) {
+        $post = null;
         http_response_code(404);
         $page_title = 'Not found';
     } else {
@@ -32,6 +37,7 @@ if ($slug) {
 } else {
     $page_title = $config['site_title'];
 }
+$draft_preview = $post && $post['status'] === 'draft';
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -39,6 +45,9 @@ if ($slug) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?php echo h($page_title); ?></title>
   <meta name="description" content="<?php echo h(isset($config['tagline']) ? $config['tagline'] : ''); ?>">
+<?php if ($draft_preview): ?>
+  <meta name="robots" content="noindex, nofollow">
+<?php endif; ?>
   <link rel="stylesheet" href="/assets/style.css?v=<?php echo rawurlencode((string) $style_version); ?>">
   <link rel="alternate" type="application/rss+xml" title="<?php echo h($config['site_title']); ?>" href="/feed.php">
 </head>
@@ -59,6 +68,12 @@ if ($slug) {
       <p>This post is not available.</p>
     </article>
 <?php elseif ($post): ?>
+<?php if ($draft_preview): ?>
+    <p class="preview-notice">
+      <strong>Draft preview</strong>
+      <a href="/admin/?action=edit&amp;slug=<?php echo rawurlencode($post['slug']); ?>">Edit post</a>
+    </p>
+<?php endif; ?>
     <article class="post">
       <p class="date"><?php echo h(date('F j, Y', strtotime($post['date']))); ?></p>
       <h1><?php echo h($post['title']); ?></h1>

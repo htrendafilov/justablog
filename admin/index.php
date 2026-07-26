@@ -1,20 +1,6 @@
 <?php
-$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-ini_set('session.use_strict_mode', '1');
-if (PHP_VERSION_ID >= 70300) {
-    session_set_cookie_params(array(
-        'lifetime' => 0,
-        'path' => '/',
-        'httponly' => true,
-        'secure' => $secure,
-        'samesite' => 'Lax',
-    ));
-} else {
-    session_set_cookie_params(0, '/; samesite=Lax', '', $secure, true);
-}
-session_start();
 require dirname(__DIR__) . '/app.php';
+blog_start_session();
 blog_send_security_headers();
 blog_ensure_storage();
 $error = '';
@@ -95,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $error = $result;
             }
-        } elseif (isset($_POST['save_post'])) {
+        } elseif (isset($_POST['save_post']) || isset($_POST['save_preview'])) {
             $old_slug = isset($_POST['old_slug']) ? $_POST['old_slug'] : '';
             $title = trim($_POST['title']);
             $slug = trim($_POST['slug']) ? blog_slugify($_POST['slug']) : blog_slugify($title);
@@ -114,6 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     blog_delete_post($old_slug);
                 }
                 blog_save_post($post);
+                if (isset($_POST['save_preview'])) {
+                    header('Location: /?post=' . rawurlencode($slug) . '&preview=1');
+                    exit;
+                }
                 header('Location: /admin/?saved=1');
                 exit;
             }
@@ -280,7 +270,13 @@ admin_header('Blog admin');
         <label>Body
           <textarea name="body" rows="18"><?php echo h($post['body']); ?></textarea>
         </label>
-        <button type="submit" name="save_post">Save post</button>
+        <div class="actions">
+          <button type="submit" name="save_post">Save post</button>
+          <button class="button secondary" type="submit" name="save_preview" formtarget="_blank">Save &amp; preview</button>
+<?php if ($editing): ?>
+          <a class="button secondary" href="/?post=<?php echo rawurlencode($post['slug']); ?>&amp;preview=1" target="_blank" rel="noopener">Preview saved version</a>
+<?php endif; ?>
+        </div>
       </form>
       <div class="help">
         <p>Formatting: <code>**bold**</code>, <code>*italic*</code>, headings, lists, quotes, links, tables, and fenced code blocks</p>
@@ -315,7 +311,10 @@ admin_header('Blog admin');
             <td><?php echo h(substr($post['date'], 0, 10)); ?></td>
             <td><?php echo h($post['status']); ?></td>
             <td><?php echo h(implode(', ', blog_post_tags($post))); ?></td>
-            <td><a href="/admin/?action=edit&amp;slug=<?php echo h($post['slug']); ?>">Edit</a></td>
+            <td class="row-actions">
+              <a href="/admin/?action=edit&amp;slug=<?php echo rawurlencode($post['slug']); ?>">Edit</a>
+              <a href="/?post=<?php echo rawurlencode($post['slug']); ?>&amp;preview=1" target="_blank" rel="noopener">Preview</a>
+            </td>
           </tr>
 <?php endforeach; ?>
         </tbody>

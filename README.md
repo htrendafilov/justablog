@@ -43,6 +43,10 @@ Use `/admin/` to create posts. Supported body markup:
 Post body headings are automatically placed below the post title in the
 document hierarchy. Raw HTML is escaped for safety.
 
+Drafts can be previewed from the post list or editor while logged in. Use
+**Save & preview** to save the current editor contents and open the preview in
+a new tab. Draft preview URLs return 404 without an active admin session.
+
 ## Files
 
 ```text

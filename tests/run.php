@@ -61,6 +61,13 @@ test_expect(strpos($html, '<script>') === false, 'raw HTML is escaped');
 test_expect(blog_slugify('Тестова статия') === 'тестова-статия', 'Cyrillic post slugs are preserved');
 test_expect(blog_tag_slug('Библия и софтуер') === 'библия-и-софтуер', 'Cyrillic tags are preserved');
 
+$published = array('status' => 'published');
+$draft = array('status' => 'draft');
+test_expect(blog_post_is_visible($published, false, false), 'published posts are public');
+test_expect(!blog_post_is_visible($draft, false, true), 'drafts require preview mode');
+test_expect(!blog_post_is_visible($draft, true, false), 'draft previews require an admin session');
+test_expect(blog_post_is_visible($draft, true, true), 'admins can preview drafts');
+
 $fake = tempnam(sys_get_temp_dir(), 'blog-upload-');
 file_put_contents($fake, '<html>not an image</html>');
 list($upload_ok) = blog_save_upload(array(

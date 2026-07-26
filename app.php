@@ -12,6 +12,29 @@ define('BLOG_MEDIA', BLOG_ROOT . '/media');
 
 require_once BLOG_ROOT . '/vendor/Parsedown.php';
 
+function blog_start_session()
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    ini_set('session.use_strict_mode', '1');
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params(array(
+            'lifetime' => 0,
+            'path' => '/',
+            'httponly' => true,
+            'secure' => $secure,
+            'samesite' => 'Lax',
+        ));
+    } else {
+        session_set_cookie_params(0, '/; samesite=Lax', '', $secure, true);
+    }
+    session_start();
+}
+
 function blog_send_security_headers($html = true)
 {
     if (headers_sent()) {
@@ -592,6 +615,12 @@ function blog_check_csrf()
 function blog_admin_logged_in()
 {
     return !empty($_SESSION['blog_admin']);
+}
+
+function blog_post_is_visible($post, $preview_requested, $admin_logged_in)
+{
+    return is_array($post)
+        && ($post['status'] === 'published' || ($preview_requested && $admin_logged_in));
 }
 
 function blog_require_admin()
