@@ -5,6 +5,7 @@ blog_ensure_storage();
 $config = blog_config();
 $path = blog_current_path();
 $slug = '';
+$style_version = @filemtime(__DIR__ . '/assets/style.css');
 
 if (preg_match('#^/post/([\p{L}\p{N}-]+)$#u', $path, $match)) {
     $slug = $match[1];
@@ -38,7 +39,7 @@ if ($slug) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?php echo h($page_title); ?></title>
   <meta name="description" content="<?php echo h(isset($config['tagline']) ? $config['tagline'] : ''); ?>">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v=<?php echo rawurlencode((string) $style_version); ?>">
   <link rel="alternate" type="application/rss+xml" title="<?php echo h($config['site_title']); ?>" href="/feed.php">
 </head>
 <body>
