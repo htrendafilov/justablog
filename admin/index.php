@@ -226,7 +226,7 @@ admin_header('Blog admin');
       <h1>Media</h1>
       <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf" value="<?php echo h(blog_csrf_token()); ?>">
-        <label>Upload file <input name="media_file" type="file" required></label>
+        <label>Upload file (maximum 50 MB) <input name="media_file" type="file" required></label>
         <button type="submit" name="upload_media">Upload</button>
       </form>
     </section>
@@ -238,7 +238,7 @@ admin_header('Blog admin');
 <?php foreach (blog_media_files() as $file):
     $path = $file['path'];
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if (in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'))) {
+    if (in_array($ext, array('jpg', 'jpeg', 'png', 'gif', 'webp'))) {
         $snippet = '![' . pathinfo($file['name'], PATHINFO_FILENAME) . '](' . $path . ')';
     } elseif (in_array($ext, array('mp4', 'webm', 'mov'))) {
         $snippet = '[video:' . $path . ']';
@@ -283,6 +283,8 @@ admin_header('Blog admin');
         <button type="submit" name="save_post">Save post</button>
       </form>
       <div class="help">
+        <p>Formatting: <code>**bold**</code>, <code>*italic*</code>, headings, lists, quotes, links, tables, and fenced code blocks</p>
+        <p>Color: <code>[color:red]text[/color]</code> or <code>[color:#b42318]text[/color]</code></p>
         <p>Images: <code>![Alt text](/media/2026/photo.jpg)</code></p>
         <p>Videos: <code>[video:/media/2026/movie.mp4]</code></p>
         <p>Downloads: <code>[Download file](/media/2026/file.pdf)</code></p>

@@ -6,7 +6,7 @@ $config = blog_config();
 $path = blog_current_path();
 $slug = '';
 
-if (preg_match('#^/post/([a-z0-9-]+)$#', $path, $match)) {
+if (preg_match('#^/post/([\p{L}\p{N}-]+)$#u', $path, $match)) {
     $slug = $match[1];
 } elseif (isset($_GET['post'])) {
     $slug = blog_slugify($_GET['post']);
@@ -91,7 +91,7 @@ if ($slug) {
 <?php foreach ($posts as $item): ?>
       <article class="archive-item">
         <time><?php echo h(date('M j, Y', strtotime($item['date']))); ?></time>
-        <h2><a href="/?post=<?php echo h($item['slug']); ?>"><?php echo h($item['title']); ?></a></h2>
+        <h2><a href="/?post=<?php echo rawurlencode($item['slug']); ?>"><?php echo h($item['title']); ?></a></h2>
         <p><?php echo h(blog_excerpt($item['body'])); ?></p>
         <?php echo blog_tag_chips($item); ?>
       </article>

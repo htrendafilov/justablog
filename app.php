@@ -10,6 +10,8 @@ define('BLOG_DATA', BLOG_ROOT . '/data');
 define('BLOG_POSTS', BLOG_DATA . '/posts');
 define('BLOG_MEDIA', BLOG_ROOT . '/media');
 
+require_once BLOG_ROOT . '/vendor/Parsedown.php';
+
 function blog_send_security_headers($html = true)
 {
     if (headers_sent()) {
@@ -176,10 +178,32 @@ function blog_url($path)
 
 function blog_slugify($text)
 {
-    $text = strtolower(trim($text));
-    $text = preg_replace('/[^a-z0-9]+/', '-', $text);
+    $text = blog_lower(trim($text));
+    $text = preg_replace('/[^\p{L}\p{N}]+/u', '-', $text);
+    if ($text === null) {
+        return 'post-' . date('Ymd-His');
+    }
     $text = trim($text, '-');
     return $text ? $text : 'post-' . date('Ymd-His');
+}
+
+function blog_lower($text)
+{
+    $text = (string) $text;
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($text, 'UTF-8');
+    }
+
+    $cyrillic = array(
+        'А' => 'а', 'Б' => 'б', 'В' => 'в', 'Г' => 'г', 'Д' => 'д',
+        'Е' => 'е', 'Ж' => 'ж', 'З' => 'з', 'И' => 'и', 'Й' => 'й',
+        'К' => 'к', 'Л' => 'л', 'М' => 'м', 'Н' => 'н', 'О' => 'о',
+        'П' => 'п', 'Р' => 'р', 'С' => 'с', 'Т' => 'т', 'У' => 'у',
+        'Ф' => 'ф', 'Х' => 'х', 'Ц' => 'ц', 'Ч' => 'ч', 'Ш' => 'ш',
+        'Щ' => 'щ', 'Ъ' => 'ъ', 'Ь' => 'ь', 'Ю' => 'ю', 'Я' => 'я',
+    );
+
+    return strtolower(strtr($text, $cyrillic));
 }
 
 function blog_post_path($slug)
@@ -337,8 +361,11 @@ function blog_tag_slug($tag)
 {
     // Like blog_slugify(), but returns '' for empty input instead of inventing
     // a timestamped fallback name.
-    $tag = strtolower(trim((string) $tag));
-    $tag = preg_replace('/[^a-z0-9]+/', '-', $tag);
+    $tag = blog_lower(trim((string) $tag));
+    $tag = preg_replace('/[^\p{L}\p{N}]+/u', '-', $tag);
+    if ($tag === null) {
+        return '';
+    }
     return trim($tag, '-');
 }
 
@@ -406,113 +433,140 @@ function blog_excerpt($body)
     return rtrim(substr($text, 0, 180)) . '...';
 }
 
-function blog_inline_markup($text)
+function blog_markdown_parser()
 {
-    $text = h($text);
-    $text = preg_replace('/!\[([^\]]*)\]\(([^)\s]+)\)/', '<img src="$2" alt="$1">', $text);
-    $text = preg_replace('/`([^`]+)`/', '<code>$1</code>', $text);
-    $text = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $text);
-    $text = preg_replace('/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]+)\)/', '<a href="$2">$1</a>', $text);
-    return $text;
+    static $parser = null;
+    if ($parser === null) {
+        $parser = new Parsedown();
+        $parser->setSafeMode(true);
+        $parser->setStrictMode(true);
+    }
+    return $parser;
+}
+
+function blog_markdown_color_value($color)
+{
+    $color = blog_lower(trim((string) $color));
+    $named = array(
+        'red' => '#b42318',
+        'blue' => '#0969da',
+        'green' => '#1a7f37',
+        'orange' => '#bc4c00',
+        'purple' => '#8250df',
+        'gray' => '#57606a',
+        'grey' => '#57606a',
+    );
+    if (isset($named[$color])) {
+        return $named[$color];
+    }
+    return preg_match('/^#[0-9a-f]{6}$/i', $color) ? $color : '';
+}
+
+function blog_markdown_media_url($url)
+{
+    $url = trim((string) $url);
+    if (substr($url, 0, 1) === '/' && substr($url, 0, 2) !== '//') {
+        return $url;
+    }
+    return preg_match('#^https://[^\s<>"\']+$#i', $url) ? $url : '';
+}
+
+function blog_markdown_demote_headings($html)
+{
+    return preg_replace_callback('/<(\/?)h([1-6])(\b[^>]*)>/', function ($match) {
+        $level = min(6, ((int) $match[2]) + 1);
+        return '<' . $match[1] . 'h' . $level . $match[3] . '>';
+    }, $html);
+}
+
+function blog_markdown_extensions($text, &$replacements, $parser)
+{
+    $text = str_replace(array("\r\n", "\r"), "\n", (string) $text);
+    $lines = explode("\n", $text);
+    $output = array();
+    $fence_character = '';
+    $fence_length = 0;
+
+    foreach ($lines as $line) {
+        if (preg_match('/^\s*(`{3,}|~{3,})/', $line, $fence)) {
+            $character = substr($fence[1], 0, 1);
+            $length = strlen($fence[1]);
+            if ($fence_character === '') {
+                $fence_character = $character;
+                $fence_length = $length;
+            } elseif ($character === $fence_character && $length >= $fence_length) {
+                $fence_character = '';
+                $fence_length = 0;
+            }
+            $output[] = $line;
+            continue;
+        }
+
+        if ($fence_character !== '') {
+            $output[] = $line;
+            continue;
+        }
+
+        if (preg_match('/^!\[([^\]\r\n]*)\]\(([^\s)\r\n]+)\)\s*$/', $line, $image)) {
+            $url = blog_markdown_media_url($image[2]);
+            if ($url !== '') {
+                $token = 'BLOGIMAGETOKEN' . count($replacements) . sha1($line) . 'END';
+                $figure = '<figure><img src="' . h($url) . '" alt="' . h($image[1]) . '">';
+                if (trim($image[1]) !== '') {
+                    $figure .= '<figcaption>' . h($image[1]) . '</figcaption>';
+                }
+                $replacements['<p>' . $token . '</p>'] = $figure . '</figure>';
+                $output[] = '';
+                $output[] = $token;
+                $output[] = '';
+                continue;
+            }
+        }
+
+        if (preg_match('/^\[video:([^\]\r\n]+)\]\s*$/', $line, $video)) {
+            $url = blog_markdown_media_url($video[1]);
+            if ($url !== '') {
+                $token = 'BLOGVIDEOTOKEN' . count($replacements) . sha1($line) . 'END';
+                $replacements['<p>' . $token . '</p>'] =
+                    '<video controls preload="metadata" src="' . h($url) . '"></video>';
+                $output[] = '';
+                $output[] = $token;
+                $output[] = '';
+                continue;
+            }
+        }
+
+        if (strpos($line, '`') === false) {
+            $line = preg_replace_callback(
+                '/(?<!\\\\)\[color:([^\]\r\n]+)\]([^\r\n]+?)\[\/color\]/i',
+                function ($match) use (&$replacements, $parser) {
+                    $color = blog_markdown_color_value($match[1]);
+                    if ($color === '') {
+                        return $match[0];
+                    }
+                    $token = 'BLOGCOLORTOKEN' . count($replacements) . sha1($match[0]) . 'END';
+                    $replacements[$token] = '<span style="color:' . h($color) . '">'
+                        . $parser->line($match[2]) . '</span>';
+                    return $token;
+                },
+                $line
+            );
+        }
+        $output[] = $line;
+    }
+
+    return implode("\n", $output);
 }
 
 function blog_markdown($text)
 {
-    $lines = preg_split('/\r\n|\r|\n/', trim((string) $text));
-    $html = '';
-    $paragraph = array();
-    $in_list = false;
-    $in_code = false;
-    $code = array();
+    $parser = blog_markdown_parser();
+    $replacements = array();
+    $text = blog_markdown_extensions($text, $replacements, $parser);
 
-    $flush_paragraph = function () use (&$paragraph, &$html) {
-        if ($paragraph) {
-            $html .= '<p>' . blog_inline_markup(implode(' ', $paragraph)) . "</p>\n";
-            $paragraph = array();
-        }
-    };
-
-    foreach ($lines as $line) {
-        $trimmed = trim($line);
-
-        if ($trimmed === '```') {
-            if ($in_code) {
-                $html .= '<pre><code>' . h(implode("\n", $code)) . "</code></pre>\n";
-                $code = array();
-                $in_code = false;
-            } else {
-                $flush_paragraph();
-                if ($in_list) {
-                    $html .= "</ul>\n";
-                    $in_list = false;
-                }
-                $in_code = true;
-            }
-            continue;
-        }
-
-        if ($in_code) {
-            $code[] = $line;
-            continue;
-        }
-
-        if ($trimmed === '') {
-            $flush_paragraph();
-            if ($in_list) {
-                $html .= "</ul>\n";
-                $in_list = false;
-            }
-            continue;
-        }
-
-        if (preg_match('/^\[video:((?:https?:\/\/|\/)[^\]\s]+)\]$/', $trimmed, $match)) {
-            $flush_paragraph();
-            $src = h($match[1]);
-            $html .= '<video controls preload="metadata" src="' . $src . '"></video>' . "\n";
-            continue;
-        }
-
-        if (preg_match('/^!\[([^\]]*)\]\(((?:https?:\/\/|\/)[^)\s]+)\)$/', $trimmed, $match)) {
-            $flush_paragraph();
-            $html .= '<figure><img src="' . h($match[2]) . '" alt="' . h($match[1]) . '">';
-            if (trim($match[1]) !== '') {
-                $html .= '<figcaption>' . h($match[1]) . '</figcaption>';
-            }
-            $html .= "</figure>\n";
-            continue;
-        }
-
-        if (preg_match('/^##\s+(.+)/', $trimmed, $match)) {
-            $flush_paragraph();
-            $html .= '<h2>' . blog_inline_markup($match[1]) . "</h2>\n";
-            continue;
-        }
-
-        if (preg_match('/^#\s+(.+)/', $trimmed, $match)) {
-            $flush_paragraph();
-            $html .= '<h1>' . blog_inline_markup($match[1]) . "</h1>\n";
-            continue;
-        }
-
-        if (preg_match('/^[-*]\s+(.+)/', $trimmed, $match)) {
-            $flush_paragraph();
-            if (!$in_list) {
-                $html .= "<ul>\n";
-                $in_list = true;
-            }
-            $html .= '<li>' . blog_inline_markup($match[1]) . "</li>\n";
-            continue;
-        }
-
-        $paragraph[] = $trimmed;
-    }
-
-    $flush_paragraph();
-    if ($in_list) {
-        $html .= "</ul>\n";
-    }
-    if ($in_code) {
-        $html .= '<pre><code>' . h(implode("\n", $code)) . "</code></pre>\n";
+    $html = blog_markdown_demote_headings($parser->text($text));
+    if ($replacements) {
+        $html = str_replace(array_keys($replacements), array_values($replacements), $html);
     }
 
     return $html;
@@ -580,16 +634,89 @@ function blog_allowed_upload_extensions()
     return array('jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'pdf', 'zip', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx');
 }
 
+function blog_upload_mime_type($path)
+{
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mime = finfo_file($finfo, $path);
+            finfo_close($finfo);
+            if (is_string($mime) && $mime !== '') {
+                return strtolower($mime);
+            }
+        }
+    }
+    if (function_exists('mime_content_type')) {
+        $mime = mime_content_type($path);
+        return is_string($mime) ? strtolower($mime) : '';
+    }
+    return '';
+}
+
+function blog_allowed_upload_mimes($ext)
+{
+    $mimes = array(
+        'jpg' => array('image/jpeg', 'image/pjpeg'),
+        'jpeg' => array('image/jpeg', 'image/pjpeg'),
+        'png' => array('image/png', 'image/x-png'),
+        'gif' => array('image/gif'),
+        'webp' => array('image/webp'),
+        'mp4' => array('video/mp4', 'application/mp4'),
+        'webm' => array('video/webm'),
+        'mov' => array('video/quicktime'),
+        'pdf' => array('application/pdf'),
+        'zip' => array('application/zip', 'application/x-zip-compressed'),
+        'txt' => array('text/plain'),
+        'md' => array('text/plain', 'text/markdown'),
+        'doc' => array('application/msword', 'application/x-ole-storage', 'application/vnd.ms-office'),
+        'xls' => array('application/vnd.ms-excel', 'application/x-ole-storage', 'application/vnd.ms-office'),
+        'ppt' => array('application/vnd.ms-powerpoint', 'application/x-ole-storage', 'application/vnd.ms-office'),
+        'docx' => array('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'),
+        'xlsx' => array('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'),
+        'pptx' => array('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'),
+    );
+    return isset($mimes[$ext]) ? $mimes[$ext] : array();
+}
+
+function blog_upload_is_valid_image($path, $ext)
+{
+    $types = array(
+        'jpg' => IMAGETYPE_JPEG,
+        'jpeg' => IMAGETYPE_JPEG,
+        'png' => IMAGETYPE_PNG,
+        'gif' => IMAGETYPE_GIF,
+        'webp' => IMAGETYPE_WEBP,
+    );
+    if (!isset($types[$ext])) {
+        return true;
+    }
+    $info = @getimagesize($path);
+    return $info !== false && isset($info[2]) && $info[2] === $types[$ext];
+}
+
 function blog_save_upload($file)
 {
     if (empty($file) || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
         return array(false, 'Upload failed.');
     }
 
+    $size = isset($file['size']) ? (int) $file['size'] : 0;
+    if ($size <= 0 || $size > 50 * 1024 * 1024) {
+        return array(false, 'Files must be between 1 byte and 50 MB.');
+    }
+
     $filename = blog_clean_filename($file['name']);
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (!in_array($ext, blog_allowed_upload_extensions())) {
         return array(false, 'This file type is not allowed.');
+    }
+
+    $mime = blog_upload_mime_type($file['tmp_name']);
+    if ($mime === '' || !in_array($mime, blog_allowed_upload_mimes($ext), true)) {
+        return array(false, 'The file contents do not match the selected file type.');
+    }
+    if (!blog_upload_is_valid_image($file['tmp_name'], $ext)) {
+        return array(false, 'That file is not a valid image.');
     }
 
     $dir = blog_media_year_dir();

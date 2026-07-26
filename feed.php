@@ -14,8 +14,8 @@ echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 <?php foreach ($posts as $post): ?>
   <item>
     <title><?php echo h($post['title']); ?></title>
-    <link><?php echo h(blog_url('/?post=' . $post['slug'])); ?></link>
-    <guid><?php echo h(blog_url('/?post=' . $post['slug'])); ?></guid>
+    <link><?php echo h(blog_url('/?post=' . rawurlencode($post['slug']))); ?></link>
+    <guid><?php echo h(blog_url('/?post=' . rawurlencode($post['slug']))); ?></guid>
     <pubDate><?php echo date(DATE_RSS, strtotime($post['date'])); ?></pubDate>
 <?php foreach (blog_post_tags($post) as $tag): ?>
     <category><?php echo h($tag); ?></category>
